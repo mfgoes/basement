@@ -1,0 +1,76 @@
+/* Load the special font (Google Font example) */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #f4f4f9;
+  font-family: Arial, sans-serif;
+  overflow: hidden;
+  /* Add transition for background-color to the body */
+  transition: background-color 2.5s ease; /* Smooth transition of background-color */
+
+}
+
+#timeline-wrapper {
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+#timeline-container {
+  display: flex;
+  flex-direction: column;
+  padding: 100px 0px;
+
+  align-items: center;
+  gap: 20px;
+  text-align: center;
+}
+
+/* Normal groupchat element */
+.groupchat {
+  font-size: 20px;
+  font-family: 'Roboto', sans-serif; /* Use the special font */
+  color: #888;
+  transition: color 0.3s ease; /* Only transition color to avoid conflict */
+}
+/* Animation for selected groupchat */
+.groupchat.selected {
+  font-weight: bold; /* Set default bold weight */
+  color: #333;
+  font-family: 'Roboto', sans-serif; /* Use the special font */
+  animation: enlargeFont 0.3s ease forwards, changeFontWeight 0.5s ease forwards; /* Apply keyframe animations */
+}
+
+/* Define the keyframes for enlarging the font size */
+@keyframes enlargeFont {
+  0% {
+    font-size: 20px; /* Starting font size */
+  }
+  100% {
+    font-size: 50px; /* Final font size */
+  }
+}
+
+/* Define the keyframes for changing the font weight */
+@keyframes changeFontWeight {
+  0% {
+    font-weight: 400; /* Normal font weight */
+  }
+  100% {
+    font-weight: 700; /* Bold font weight */
+  }
+}
+
+.date {
+  margin-top: 5px;
+  font-size: 16px;
+  color: #555;
+}
