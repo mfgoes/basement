@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>CSV Merger Tool</title>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+	<style>
+		body {
+			font-family: Arial, sans-serif;
+			max-width: 1200px;
+			margin: 0 auto;
+			padding: 20px;
+			background-color: #f5f5f5;
+		}
+		
+		.container {
+			background: white;
+			padding: 30px;
+			border-radius: 10px;
+			box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+		}
+		
+		h1 {
+			color: #333;
+			text-align: center;
+			margin-bottom: 30px;
+		}
+		
+		.file-section {
+			margin-bottom: 30px;
+			padding: 20px;
+			border: 2px dashed #ddd;
+			border-radius: 8px;
+		}
+		
+		.file-section.loaded {
+			border-color: #4CAF50;
+			background-color: #f9fff9;
+		}
+		
+		.file-input {
+			margin-bottom: 15px;
+		}
+		
+		label {
+			display: block;
+			font-weight: bold;
+			margin-bottom: 5px;
+			color: #555;
+		}
+		
+		input[type="file"] {
+			width: 100%;
+			padding: 10px;
+			border: 1px solid #ddd;
+			border-radius: 4px;
+		}
+		
+		.preview {
+			margin-top: 15px;
+			padding: 15px;
+			background-color: #f8f9fa;
+			border-radius: 4px;
+			border-left: 4px solid #007bff;
+		}
+		
+		.preview h4 {
+			margin-top: 0;
+			color: #007bff;
+		}
+		
+		.preview-table {
+			width: 100%;
+			border-collapse: collapse;
+			margin-top: 10px;
+		}
+		
+		.preview-table th,
+		.preview-table td {
+			border: 1px solid #ddd;
+			padding: 8px;
+			text-align: left;
+		}
+		
+		.preview-table th {
+			background-color: #e9ecef;
+		}
+		
+		.controls {
+			text-align: center;
+			margin: 30px 0;
+		}
+		
+		button {
+			background-color: #007bff;
+			color: white;
+			border: none;
+			padding: 12px 24px;
+			border-radius: 4px;
+			cursor: pointer;
+			font-size: 16px;
+			margin: 0 10px;
+		}
+		
+		button:hover {
+			background-color: #0056b3;
+		}
+		
+		button:disabled {
+			background-color: #6c757d;
+			cursor: not-allowed;
+		}
+		
+		.results {
+			margin-top: 30px;
+			padding: 20px;
+			background-color: #f8f9fa;
+			border-radius: 8px;
+		}
+		
+		.stats {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+			gap: 15px;
+			margin-bottom: 20px;
+		}
+		
+		.stat-card {
+			background: white;
+			padding: 15px;
+			border-radius: 6px;
+			text-align: center;
+			box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+		}
+		
+		.stat-number {
+			font-size: 24px;
+			font-weight: bold;
+			color: #007bff;
+		}
+		
+		.stat-label {
+			color: #666;
+			margin-top: 5px;
+		}
+		
+		.download-section {
+			text-align: center;
+			margin-top: 20px;
+		}
+		
+		.hidden {
+			display: none;
+		}
+		
+		.error {
+			background-color: #f8d7da;
+			color: #721c24;
+			padding: 10px;
+			border-radius: 4px;
+			margin-top: 10px;
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<h1>📊 CSV Merger Tool</h1>
+		
+		<div class="file-section" id="groupchats-section">
+			<div class="file-input">
+				<label for="groupchats-file">Upload Groupchats CSV (name, date format):</label>
+				<input type="file" id="groupchats-file" accept=".csv" />
+			</div>
+			<div id="groupchats-preview" class="preview hidden"></div>
+		</div>
+		
+		<div class="file-section" id="namechanges-section">
+			<div class="file-input">
+				<label for="namechanges-file">Upload Group Name Changes CSV (Changed By, Old Name, New Name, Change Date):</label>
+				<input type="file" id="namechanges-file" accept=".csv" />
+			</div>
+			<div id="namechanges-preview" class="preview hidden"></div>
+		</div>
+		
+		<div class="controls">
+			<button id="merge-btn" disabled>🔗 Merge CSVs</button>
+			<button id="clear-btn">🗑️ Clear All</button>
+		</div>
+		
+		<div id="results" class="results hidden">
+			<h3>📋 Merge Results</h3>
+			<div class="stats">
+				<div class="stat-card">
+					<div class="stat-number" id="total-records">0</div>
+					<div class="stat-label">Total Records</div>
+				</div>
+				<div class="stat-card">
+					<div class="stat-number" id="groupchats-count">0</div>
+					<div class="stat-label">From Groupchats</div>
+				</div>
+				<div class="stat-card">
+					<div class="stat-number" id="namechanges-count">0</div>
+					<div class="stat-label">From Name Changes</div>
+				</div>
+				<div class="stat-card">
+					<div class="stat-number" id="date-range">-</div>
+					<div class="stat-label">Date Range</div>
+				</div>
+			</div>
+			
+			<div class="download-section">
+				<button id="download-btn">💾 Download Merged CSV</button>
+				<button id="preview-btn">👁️ Preview Data</button>
+			</div>
+			
+			<div id="merged-preview" class="preview hidden">
+				<h4>📄 Merged Data Preview (first 10 rows)</h4>
+				<div id="merged-table"></div>
+			</div>
+		</div>
+	</div>
+
+	<script>
+		let groupchatsData = null;
+		let nameChangesData = null;
+		let mergedData = null;
+
+		// File input handlers
+		document.getElementById('groupchats-file').addEventListener('change', function(e) {
+			handleFileUpload(e.target.files[0], 'groupchats');
+		});
+
+		document.getElementById('namechanges-file').addEventListener('change', function(e) {
+			handleFileUpload(e.target.files[0], 'namechanges');
+		});
+
+		function handleFileUpload(file, type) {
+			if (!file) return;
+
+			const reader = new FileReader();
+			reader.onload = function(e) {
+				const csv = e.target.result;
+				
+				if (type === 'groupchats') {
+					parseGroupchatsCSV(csv);
+				} else {
+					parseNameChangesCSV(csv);
+				}
+				
+				updateUI();
+			};
+			reader.readAsText(file);
+		}
+
+		function parseGroupchatsCSV(csv) {
+			try {
+				// Skip header and parse as name,date
+				const lines = csv.split('\n').slice(1).filter(line => line.trim());
+				
+				groupchatsData = lines.map(line => {
+					const parsed = Papa.parse(line, { header: false, skipEmptyLines: true });
+					if (parsed.data[0] && parsed.data[0].length >= 2) {
+						return {
+							name: parsed.data[0][0].replace(/"/g, ''),
+							date: parsed.data[0][1],
+							source: 'groupchats',
+							changedBy: '',
+							oldName: ''
+						};
+					}
+					return null;
+				}).filter(record => record !== null);
+
+				showPreview('groupchats', groupchatsData.slice(0, 5));
+				document.getElementById('groupchats-section').classList.add('loaded');
+			} catch (error) {
+				showError('groupchats', 'Error parsing groupchats CSV: ' + error.message);
+			}
+		}
+
+		function parseNameChangesCSV(csv) {
+			try {
+				const parsed = Papa.parse(csv, {
+					header: true,
+					dynamicTyping: true,
+					skipEmptyLines: true
+				});
+
+				nameChangesData = parsed.data.map(row => ({
+					name: row['New Name'] || '',
+					date: row['Change Date'] || '',
+					source: 'name_changes',
+					changedBy: row['Changed By'] || '',
+					oldName: row['Old Name'] || ''
+				}));
+
+				showPreview('namechanges', nameChangesData.slice(0, 5));
+				document.getElementById('namechanges-section').classList.add('loaded');
+			} catch (error) {
+				showError('namechanges', 'Error parsing name changes CSV: ' + error.message);
+			}
+		}
+
+		function showPreview(type, data) {
+			const previewDiv = document.getElementById(type + '-preview');
+			previewDiv.innerHTML = `
+				<h4>📄 Preview (${data.length} of ${type === 'groupchats' ? groupchatsData.length : nameChangesData.length} records)</h4>
+				${createTable(data)}
+			`;
+			previewDiv.classList.remove('hidden');
+		}
+
+		function showError(type, message) {
+			const previewDiv = document.getElementById(type + '-preview');
+			previewDiv.innerHTML = `<div class="error">${message}</div>`;
+			previewDiv.classList.remove('hidden');
+		}
+
+		function createTable(data) {
+			if (!data || data.length === 0) return '<p>No data to display</p>';
+
+			const headers = Object.keys(data[0]);
+			let html = '<table class="preview-table"><thead><tr>';
+			
+			headers.forEach(header => {
+				html += `<th>${header}</th>`;
+			});
+			html += '</tr></thead><tbody>';
+
+			data.forEach(row => {
+				html += '<tr>';
+				headers.forEach(header => {
+					html += `<td>${row[header] || ''}</td>`;
+				});
+				html += '</tr>';
+			});
+
+			html += '</tbody></table>';
+			return html;
+		}
+
+		function updateUI() {
+			const mergeBtn = document.getElementById('merge-btn');
+			mergeBtn.disabled = !(groupchatsData && nameChangesData);
+		}
+
+		// Merge functionality
+		document.getElementById('merge-btn').addEventListener('click', function() {
+			if (!groupchatsData || !nameChangesData) return;
+
+			// Combine data
+			mergedData = [...groupchatsData, ...nameChangesData];
+			
+			// Sort by date
+			mergedData.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+			// Update stats
+			document.getElementById('total-records').textContent = mergedData.length;
+			document.getElementById('groupchats-count').textContent = groupchatsData.length;
+			document.getElementById('namechanges-count').textContent = nameChangesData.length;
+			
+			const dates = mergedData.map(r => r.date).filter(d => d);
+			const minDate = dates.reduce((min, date) => date < min ? date : min);
+			const maxDate = dates.reduce((max, date) => date > max ? date : max);
+			document.getElementById('date-range').textContent = `${minDate} to ${maxDate}`;
+
+			document.getElementById('results').classList.remove('hidden');
+		});
+
+		// Preview merged data
+		document.getElementById('preview-btn').addEventListener('click', function() {
+			if (!mergedData) return;
+
+			const previewDiv = document.getElementById('merged-preview');
+			previewDiv.innerHTML = `
+				<h4>📄 Merged Data Preview (first 10 rows)</h4>
+				${createTable(mergedData.slice(0, 10))}
+			`;
+			previewDiv.classList.remove('hidden');
+		});
+
+		// Download functionality
+		document.getElementById('download-btn').addEventListener('click', function() {
+			if (!mergedData) return;
+
+			const headers = ['name', 'date', 'source', 'changedBy', 'oldName'];
+			let csvContent = headers.join(',') + '\n';
+			
+			mergedData.forEach(record => {
+				const row = headers.map(header => {
+					let value = record[header] || '';
+					if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+						value = '"' + value.replace(/"/g, '""') + '"';
+					}
+					return value;
+				});
+				csvContent += row.join(',') + '\n';
+			});
+
+			const blob = new Blob([csvContent], { type: 'text/csv' });
+			const url = window.URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = 'merged_groupchats.csv';
+			a.click();
+			window.URL.revokeObjectURL(url);
+		});
+
+		// Clear functionality
+		document.getElementById('clear-btn').addEventListener('click', function() {
+			groupchatsData = null;
+			nameChangesData = null;
+			mergedData = null;
+			
+			document.getElementById('groupchats-file').value = '';
+			document.getElementById('namechanges-file').value = '';
+			document.getElementById('groupchats-preview').classList.add('hidden');
+			document.getElementById('namechanges-preview').classList.add('hidden');
+			document.getElementById('results').classList.add('hidden');
+			document.getElementById('merged-preview').classList.add('hidden');
+			document.getElementById('groupchats-section').classList.remove('loaded');
+			document.getElementById('namechanges-section').classList.remove('loaded');
+			
+			updateUI();
+		});
+	</script>
+</body>
+</html>

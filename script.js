@@ -1,107 +1,108 @@
-// main.js
-import { changeBackgroundColor } from './background-change.js';
+// script.js - Back to original approach with optimizations
+import { loadCSV } from './csv-loader.js';
+import { TimelineRenderer } from './timeline-renderer.js';
+import { scrollToTop, toggleScrollButton } from './scroll-utils.js';
+import { QuarterNavigator } from './quarter-navigator.js';
 
-const timelineContainer = document.getElementById("timeline-container");
-const timelineWrapper = document.getElementById("timeline-wrapper");
-let data = [];
-let selectedIndex = 0;
+class GroupChatTimeline {
+	constructor() {
+		this.timelineContainer = document.getElementById("timeline-container");
+		this.timelineWrapper = document.getElementById("timeline-wrapper");
+		this.scrollToTopBtn = document.getElementById("scroll-to-top");
+		
+		this.renderer = new TimelineRenderer(this.timelineContainer, this.timelineWrapper);
+		this.quarterNavigator = null;
+		
+		this.init();
+	}
 
-function renderTimeline() {
-  timelineContainer.innerHTML = "";
+	async init() {
+		await this.loadData();
+		this.setupEventListeners();
+		this.renderer.render();
+		
+		// Apply performance optimizations for large datasets
+		this.renderer.optimizeForLargeDataset();
+	}
 
-  data.forEach((item, index) => {
-    const groupchatElement = document.createElement("div");
-    groupchatElement.classList.add("groupchat");
-    if (index === selectedIndex) {
-      groupchatElement.classList.add("selected");
-      changeBackgroundColor(groupchatElement); // Apply random background color when selected
-    }
+	async loadData() {
+		const data = await loadCSV();
+		this.renderer.setData(data);
+		
+		// Create quarter navigator after data is loaded
+		this.quarterNavigator = new QuarterNavigator(data, (index) => {
+			this.renderer.setSelectedIndex(index);
+			this.renderer.updateSelection();
+		});
+		
+		// Add navigation button to header
+		this.addNavigationButton();
+	}
 
-    groupchatElement.textContent = item.name;
-    if (index === selectedIndex) {
-      const dateElement = document.createElement("div");
-      dateElement.classList.add("date");
-      dateElement.textContent = item.date;
-      groupchatElement.appendChild(dateElement);
-    }
+	addNavigationButton() {
+		const header = document.getElementById('header');
+		const navButton = document.createElement('button');
+		navButton.id = 'nav-button';
+		navButton.innerHTML = '📊';
+		navButton.title = 'Toggle Quarter Filter (Ctrl+F)';
+		navButton.addEventListener('click', () => {
+			this.quarterNavigator.toggle();
+		});
+		header.appendChild(navButton);
+	}
 
-    timelineContainer.appendChild(groupchatElement);
-  });
+	handleScroll(e) {
+		const currentIndex = this.renderer.getSelectedIndex();
+		const dataLength = this.renderer.getDataLength();
+		
+		if (e.deltaY > 0 || e.key === "ArrowDown") {
+			this.renderer.setSelectedIndex(currentIndex + 1);
+		} else if (e.deltaY < 0 || e.key === "ArrowUp") {
+			this.renderer.setSelectedIndex(currentIndex - 1);
+		}
 
-  // Ensure the selected item is centered with slower scroll
-  const selectedElement = document.querySelector(".groupchat.selected");
-  if (selectedElement) {
-    slowScrollToElement(selectedElement);
-  }
+		// Use the optimized update method instead of full render
+		setTimeout(() => {
+			this.renderer.updateSelection();
+			// Update quarter navigator highlight
+			if (this.quarterNavigator) {
+				this.quarterNavigator.highlightCurrentQuarter(this.renderer.getSelectedIndex());
+			}
+		}, 10);
+	}
+
+	setupEventListeners() {
+		// Scroll and keyboard navigation
+		window.addEventListener("wheel", (e) => this.handleScroll(e));
+		window.addEventListener("keydown", (e) => {
+			// Handle Ctrl+F or Cmd+F for quick navigation
+			if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+				e.preventDefault();
+				this.quarterNavigator.toggle();
+			} else {
+				this.handleScroll(e);
+			}
+		});
+		
+		// Scroll to top button
+		this.scrollToTopBtn.addEventListener('click', () => {
+			scrollToTop(this.timelineWrapper);
+		});
+		
+		// Toggle scroll button visibility with throttling for performance
+		let scrollTimeout;
+		this.timelineWrapper.addEventListener('scroll', () => {
+			if (scrollTimeout) {
+				clearTimeout(scrollTimeout);
+			}
+			scrollTimeout = setTimeout(() => {
+				toggleScrollButton(this.timelineWrapper, this.scrollToTopBtn);
+			}, 16); // ~60fps
+		});
+	}
 }
 
-// Function to scroll to an element with slower speed, positioning it closer to the middle
-function slowScrollToElement(element) {
-  const targetPosition = element.getBoundingClientRect().top + timelineWrapper.scrollTop;
-  const wrapperHeight = timelineWrapper.clientHeight;
-  const offset = wrapperHeight / 2 - element.clientHeight / 2; // Position the element in the middle
-
-  const startPosition = timelineWrapper.scrollTop;
-  const distance = targetPosition - startPosition - offset;
-  const duration = 1000; // Duration of the scroll in ms (increase for slower scroll)
-  let startTime = null;
-
-  // Smoothly scroll to the element
-  function scrollStep(timestamp) {
-    if (!startTime) startTime = timestamp;
-    const progress = timestamp - startTime;
-    const scrollAmount = easeInOutCubic(progress, startPosition, distance, duration);
-
-    timelineWrapper.scrollTo(0, scrollAmount);
-
-    if (progress < duration) {
-      window.requestAnimationFrame(scrollStep);
-    }
-  }
-
-  window.requestAnimationFrame(scrollStep);
-}
-
-// Ease-in-out cubic function for smooth acceleration and deceleration
-function easeInOutCubic(t, b, c, d) {
-  t /= d / 2;
-  if (t < 1) return (c / 2) * t * t * t + b;
-  t -= 2;
-  return (c / 2) * (t * t * t + 2) + b;
-}
-
-function handleScroll(e) {
-  if (e.deltaY > 0 || e.key === "ArrowDown") {
-    selectedIndex = Math.min(selectedIndex + 1, data.length - 1);
-  } else if (e.deltaY < 0 || e.key === "ArrowUp") {
-    selectedIndex = Math.max(selectedIndex - 1, 0);
-  }
-
-  // Delay the class toggle to ensure the transition works smoothly
-  setTimeout(() => renderTimeline(), 10);
-}
-
-async function loadCSV() {
-  try {
-    const response = await fetch("groupchats.csv");
-    const text = await response.text();
-    const rows = text.split("\n").slice(1); // Skip header row
-
-    data = rows
-      .map(row => row.split(","))
-      .filter(columns => columns.length === 2 && columns[0] && columns[1]) // Ensure both name and date exist
-      .map(columns => ({
-        name: columns[0].trim(),
-        date: columns[1].trim()
-      }));
-
-    renderTimeline();
-  } catch (error) {
-    console.error("Error loading CSV:", error);
-  }
-}
-
-window.addEventListener("wheel", handleScroll);
-window.addEventListener("keydown", handleScroll);
-
-loadCSV();
+// Initialize the application when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+	new GroupChatTimeline();
+});

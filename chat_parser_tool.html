@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Chat Export Parser</title>
+	<style>
+		body {
+			font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+			max-width: 800px;
+			margin: 0 auto;
+			padding: 20px;
+			background: #f5f7fa;
+			color: #333;
+		}
+
+		.container {
+			background: white;
+			border-radius: 12px;
+			padding: 30px;
+			box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+		}
+
+		h1 {
+			color: #2c3e50;
+			margin-bottom: 30px;
+			text-align: center;
+		}
+
+		.upload-section {
+			border: 2px dashed #3498db;
+			border-radius: 8px;
+			padding: 30px;
+			text-align: center;
+			margin-bottom: 20px;
+			background: #f8f9fa;
+			transition: all 0.3s ease;
+		}
+
+		.upload-section:hover {
+			border-color: #2980b9;
+			background: #e3f2fd;
+		}
+
+		.upload-section.dragover {
+			border-color: #2980b9;
+			background: #e3f2fd;
+			transform: scale(1.02);
+		}
+
+		#file-input {
+			margin: 10px 0;
+		}
+
+		.btn {
+			background: linear-gradient(135deg, #3498db, #2980b9);
+			color: white;
+			border: none;
+			padding: 12px 24px;
+			border-radius: 6px;
+			cursor: pointer;
+			font-size: 14px;
+			font-weight: 500;
+			transition: all 0.3s ease;
+			margin: 5px;
+		}
+
+		.btn:hover {
+			transform: translateY(-2px);
+			box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4);
+		}
+
+		.btn:disabled {
+			background: #bdc3c7;
+			cursor: not-allowed;
+			transform: none;
+			box-shadow: none;
+		}
+
+		.results {
+			margin-top: 30px;
+			display: none;
+		}
+
+		.stats {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+			gap: 15px;
+			margin-bottom: 20px;
+		}
+
+		.stat-card {
+			background: linear-gradient(135deg, #667eea, #764ba2);
+			color: white;
+			padding: 15px;
+			border-radius: 8px;
+			text-align: center;
+		}
+
+		.stat-number {
+			font-size: 24px;
+			font-weight: bold;
+			display: block;
+		}
+
+		.stat-label {
+			font-size: 12px;
+			opacity: 0.8;
+		}
+
+		.preview {
+			background: #f8f9fa;
+			border: 1px solid #dee2e6;
+			border-radius: 6px;
+			padding: 15px;
+			margin-bottom: 20px;
+			max-height: 300px;
+			overflow-y: auto;
+		}
+
+		.preview table {
+			width: 100%;
+			border-collapse: collapse;
+		}
+
+		.preview th, .preview td {
+			padding: 8px 12px;
+			text-align: left;
+			border-bottom: 1px solid #dee2e6;
+		}
+
+		.preview th {
+			background: #e9ecef;
+			font-weight: 600;
+		}
+
+		.error {
+			background: #f8d7da;
+			color: #721c24;
+			padding: 12px;
+			border-radius: 6px;
+			margin-bottom: 20px;
+		}
+
+		.info {
+			background: #d1ecf1;
+			color: #0c5460;
+			padding: 12px;
+			border-radius: 6px;
+			margin-bottom: 20px;
+		}
+
+		.processing {
+			text-align: center;
+			padding: 20px;
+			color: #6c757d;
+		}
+
+		.spinner {
+			display: inline-block;
+			width: 20px;
+			height: 20px;
+			border: 3px solid #f3f3f3;
+			border-top: 3px solid #3498db;
+			border-radius: 50%;
+			animation: spin 1s linear infinite;
+			margin-right: 10px;
+		}
+
+		@keyframes spin {
+			0% { transform: rotate(0deg); }
+			100% { transform: rotate(360deg); }
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<h1>📱 Chat Export Parser</h1>
+		
+		<div class="upload-section" id="upload-section">
+			<h3>Upload Your Chat Export File</h3>
+			<p>Supports .txt files from WhatsApp, Telegram, Discord, and other platforms</p>
+			<input type="file" id="file-input" accept=".txt" />
+			<p>Or drag and drop your file here</p>
+		</div>
+
+		<div class="info">
+			<strong>Supported formats:</strong>
+			<ul style="margin: 10px 0 0 20px;">
+				<li>WhatsApp: "[DD/MM/YYYY, HH:MM:SS] Contact Name: message"</li>
+				<li>Telegram: "[DD.MM.YY HH:MM:SS] Contact Name: message"</li>
+				<li>Discord: "[DD-MMM-YY HH:MM AM/PM] Contact Name: message"</li>
+				<li>Custom formats with dates and contact names</li>
+			</ul>
+		</div>
+
+		<div id="results" class="results">
+			<div id="stats" class="stats"></div>
+			<div id="preview" class="preview"></div>
+			<button id="download-btn" class="btn">📥 Download CSV</button>
+			<button id="copy-btn" class="btn">📋 Copy to Clipboard</button>
+		</div>
+	</div>
+
+	<script>
+		class ChatParser {
+			constructor() {
+				this.data = [];
+				this.setupEventListeners();
+			}
+
+			setupEventListeners() {
+				const fileInput = document.getElementById('file-input');
+				const uploadSection = document.getElementById('upload-section');
+
+				fileInput.addEventListener('change', (e) => this.handleFile(e.target.files[0]));
+
+				// Drag and drop
+				uploadSection.addEventListener('dragover', (e) => {
+					e.preventDefault();
+					uploadSection.classList.add('dragover');
+				});
+
+				uploadSection.addEventListener('dragleave', () => {
+					uploadSection.classList.remove('dragover');
+				});
+
+				uploadSection.addEventListener('drop', (e) => {
+					e.preventDefault();
+					uploadSection.classList.remove('dragover');
+					this.handleFile(e.dataTransfer.files[0]);
+				});
+
+				document.getElementById('download-btn').addEventListener('click', () => this.downloadCSV());
+				document.getElementById('copy-btn').addEventListener('click', () => this.copyToClipboard());
+			}
+
+			async handleFile(file) {
+				if (!file || !file.name.endsWith('.txt')) {
+					this.showError('Please select a valid .txt file');
+					return;
+				}
+
+				this.showProcessing();
+
+				try {
+					const text = await this.readFile(file);
+					this.parseChat(text);
+					this.showResults();
+				} catch (error) {
+					this.showError('Error reading file: ' + error.message);
+				}
+			}
+
+			readFile(file) {
+				return new Promise((resolve, reject) => {
+					const reader = new FileReader();
+					reader.onload = (e) => resolve(e.target.result);
+					reader.onerror = (e) => reject(new Error('Failed to read file'));
+					reader.readAsText(file);
+				});
+			}
+
+			parseChat(text) {
+				const lines = text.split('\n');
+				const chatMap = new Map();
+
+				// Common patterns for different platforms
+				const patterns = [
+					// WhatsApp: [25/12/2023, 14:30:25] John Doe: message
+					/^\[(\d{1,2}\/\d{1,2}\/\d{4}),\s*(\d{1,2}:\d{2}:\d{2})\]\s*([^:]+):/,
+					// Telegram: [25.12.23 14:30:25] John Doe: message  
+					/^\[(\d{1,2}\.\d{1,2}\.\d{2})\s+(\d{1,2}:\d{2}:\d{2})\]\s*([^:]+):/,
+					// Discord: [25-Dec-23 02:30 PM] John Doe: message
+					/^\[(\d{1,2}-\w{3}-\d{2})\s+(\d{1,2}:\d{2}\s*[AP]M)\]\s*([^:]+):/,
+					// Generic: Date Time Name: message
+					/^(\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4})\s+(\d{1,2}:\d{2}[:\d{2}]*\s*[AP]?M?)\s*([^:]+):/,
+					// Simple format: Name (Date): message
+					/^([^(]+)\s*\(([^)]+)\):/
+				];
+
+				lines.forEach(line => {
+					line = line.trim();
+					if (!line) return;
+
+					for (const pattern of patterns) {
+						const match = line.match(pattern);
+						if (match) {
+							let date, time, name;
+
+							if (pattern === patterns[4]) { // Simple format
+								name = match[1].trim();
+								date = match[2].trim();
+								time = '';
+							} else {
+								date = match[1];
+								time = match[2] || '';
+								name = match[3].trim();
+							}
+
+							// Clean up name
+							name = name.replace(/[<>]/g, '').trim();
+							if (!name || name.length < 2) return;
+
+							// Parse date
+							const parsedDate = this.parseDate(date, time);
+							if (!parsedDate) return;
+
+							// Store the most recent date for each contact
+							if (!chatMap.has(name) || parsedDate > chatMap.get(name).date) {
+								chatMap.set(name, {
+									name: name,
+									date: parsedDate,
+									dateString: this.formatDate(parsedDate)
+								});
+							}
+							break;
+						}
+					}
+				});
+
+				// Convert to array and sort by most recent
+				this.data = Array.from(chatMap.values())
+					.sort((a, b) => b.date - a.date);
+			}
+
+			parseDate(dateStr, timeStr = '') {
+				// Try different date formats
+				const formats = [
+					// DD/MM/YYYY
+					/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/,
+					// DD.MM.YY
+					/^(\d{1,2})\.(\d{1,2})\.(\d{2})$/,
+					// DD-MMM-YY
+					/^(\d{1,2})-(\w{3})-(\d{2})$/
+				];
+
+				for (const format of formats) {
+					const match = dateStr.match(format);
+					if (match) {
+						let day, month, year;
+
+						if (format === formats[2]) { // DD-MMM-YY
+							day = parseInt(match[1]);
+							month = this.getMonthNumber(match[2]);
+							year = 2000 + parseInt(match[3]);
+						} else {
+							day = parseInt(match[1]);
+							month = parseInt(match[2]);
+							year = format === formats[1] ? 2000 + parseInt(match[3]) : parseInt(match[3]);
+						}
+
+						// Create date object
+						const date = new Date(year, month - 1, day);
+						return isNaN(date.getTime()) ? null : date;
+					}
+				}
+
+				// Try parsing as generic date
+				const genericDate = new Date(dateStr);
+				return isNaN(genericDate.getTime()) ? null : genericDate;
+			}
+
+			getMonthNumber(monthStr) {
+				const months = {
+					'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+					'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
+				};
+				return months[monthStr] || 1;
+			}
+
+			formatDate(date) {
+				return date.toISOString().split('T')[0]; // YYYY-MM-DD format
+			}
+
+			showProcessing() {
+				document.getElementById('results').style.display = 'none';
+				document.querySelector('.upload-section').innerHTML = `
+					<div class="processing">
+						<div class="spinner"></div>
+						Processing your chat export...
+					</div>
+				`;
+			}
+
+			showResults() {
+				// Restore upload section
+				document.querySelector('.upload-section').innerHTML = `
+					<h3>Upload Your Chat Export File</h3>
+					<p>Supports .txt files from WhatsApp, Telegram, Discord, and other platforms</p>
+					<input type="file" id="file-input" accept=".txt" />
+					<p>Or drag and drop your file here</p>
+				`;
+				this.setupEventListeners();
+
+				// Show stats
+				const statsDiv = document.getElementById('stats');
+				statsDiv.innerHTML = `
+					<div class="stat-card">
+						<span class="stat-number">${this.data.length}</span>
+						<span class="stat-label">Unique Chats</span>
+					</div>
+					<div class="stat-card">
+						<span class="stat-number">${this.getDateRange()}</span>
+						<span class="stat-label">Date Range</span>
+					</div>
+				`;
+
+				// Show preview
+				const previewDiv = document.getElementById('preview');
+				previewDiv.innerHTML = `
+					<h4>Preview (First 10 entries)</h4>
+					<table>
+						<thead>
+							<tr><th>Name</th><th>Last Activity</th></tr>
+						</thead>
+						<tbody>
+							${this.data.slice(0, 10).map(item => 
+								`<tr><td>${item.name}</td><td>${item.dateString}</td></tr>`
+							).join('')}
+						</tbody>
+					</table>
+					${this.data.length > 10 ? `<p><em>... and ${this.data.length - 10} more entries</em></p>` : ''}
+				`;
+
+				document.getElementById('results').style.display = 'block';
+			}
+
+			getDateRange() {
+				if (this.data.length === 0) return 'N/A';
+				const earliest = new Date(Math.min(...this.data.map(d => d.date)));
+				const latest = new Date(Math.max(...this.data.map(d => d.date)));
+				return `${earliest.getFullYear()}-${latest.getFullYear()}`;
+			}
+
+			generateCSV() {
+				const headers = ['name,date'];
+				const rows = this.data.map(item => `"${item.name}","${item.dateString}"`);
+				return headers.concat(rows).join('\n');
+			}
+
+			downloadCSV() {
+				const csv = this.generateCSV();
+				const blob = new Blob([csv], { type: 'text/csv' });
+				const url = URL.createObjectURL(blob);
+				
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = 'groupchats.csv';
+				document.body.appendChild(a);
+				a.click();
+				document.body.removeChild(a);
+				URL.revokeObjectURL(url);
+			}
+
+			async copyToClipboard() {
+				const csv = this.generateCSV();
+				try {
+					await navigator.clipboard.writeText(csv);
+					const btn = document.getElementById('copy-btn');
+					const originalText = btn.textContent;
+					btn.textContent = '✅ Copied!';
+					setTimeout(() => btn.textContent = originalText, 2000);
+				} catch (err) {
+					console.error('Failed to copy:', err);
+				}
+			}
+
+			showError(message) {
+				document.querySelector('.upload-section').innerHTML = `
+					<div class="error">${message}</div>
+					<h3>Upload Your Chat Export File</h3>
+					<p>Supports .txt files from WhatsApp, Telegram, Discord, and other platforms</p>
+					<input type="file" id="file-input" accept=".txt" />
+					<p>Or drag and drop your file here</p>
+				`;
+				this.setupEventListeners();
+			}
+		}
+
+		// Initialize the parser
+		new ChatParser();
+	</script>
+</body>
+</html>
